@@ -112,35 +112,106 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+// Distancias minimas por casillas hasta el objetivo, incluyendo el tunel.
+// La puerta es transitable en ambos sentidos para los fantasmas.
+function ghostDistances( grid, targetX, targetY ) {
+  const width = grid[ 0 ].length;
+  const distances = grid.map( ( row ) => row.map( () => Infinity ) );
+  if ( isWall( grid, targetX, targetY, 'ghost' ) ) return distances;
+
+  const queue = [ { x: targetX, y: targetY } ];
+  distances[ targetY ][ targetX ] = 0;
+  for ( let i = 0; i < queue.length; i++ ) {
+    const { x, y } = queue[ i ];
+    for ( const dir of Object.keys( DIRS ) ) {
+      if ( !canMove( grid, x, y, dir, 'ghost' ) ) continue;
+      const d = DIRS[ dir ];
+      const nx = ( x + d.x + width ) % width;
+      const ny = y + d.y;
+      if ( distances[ ny ][ nx ] !== Infinity ) continue;
+      distances[ ny ][ nx ] = distances[ y ][ x ] + 1;
+      queue.push( { x: nx, y: ny } );
+    }
+  }
+  return distances;
+}
+
+// Si el objetivo no es accesible, escoger el mas cercano en distancia
+// Manhattan. Recorrer por filas y columnas resuelve los empates.
+function reachableTarget( grid, g, targetX, targetY ) {
+  const fromGhost = ghostDistances( grid, g.x, g.y );
+  if ( targetY >= 0 && targetY < grid.length &&
+       targetX >= 0 && targetX < grid[ 0 ].length &&
+       fromGhost[ targetY ][ targetX ] !== Infinity ) {
+    return { x: targetX, y: targetY };
+  }
+
+  let best = null;
+  let bestDist = Infinity;
+  for ( let y = 0; y < grid.length; y++ ) {
+    for ( let x = 0; x < grid[ y ].length; x++ ) {
+      if ( fromGhost[ y ][ x ] === Infinity ) continue;
+      const dist = Math.abs( x - targetX ) + Math.abs( y - targetY );
+      if ( dist < bestDist ) {
+        bestDist = dist;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
+
+function routeGhost( grid, g, targetX, targetY, useFallback = false ) {
+  const target = useFallback
+    ? reachableTarget( grid, g, targetX, targetY )
+    : { x: targetX, y: targetY };
+  if ( !target ) return;
+
+  const distances = ghostDistances( grid, target.x, target.y );
+  const width = grid[ 0 ].length;
+  let best = null;
+  let bestDist = Infinity;
+  // Incluir la media vuelta si conduce a una ruta mas corta.
+  for ( const dir of Object.keys( DIRS ) ) {
+    if ( !canMove( grid, g.x, g.y, dir, 'ghost' ) ) continue;
+    const d = DIRS[ dir ];
+    const nx = ( g.x + d.x + width ) % width;
+    const dist = distances[ g.y + d.y ][ nx ];
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  if ( best ) g.dir = best;
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
+
+  if ( !g.released && g.x === 13 && g.y === 11 ) g.released = true;
+  if ( !g.released ) {
+    routeGhost( grid, g, 13, 11 );
+    return;
+  }
+
+  if ( g.kind === 'hunter' ) {
+    routeGhost( grid, g, Math.round( p.x ), Math.round( p.y ) );
+    return;
+  }
+  if ( g.kind === 'ambusher' ) {
+    const d = DIRS[ p.dir ];
+    routeGhost( grid, g, Math.round( p.x ) + 4 * d.x,
+      Math.round( p.y ) + 4 * d.y, true );
+    return;
+  }
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
-
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
-    }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
-  }
+  g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
 }
 
 function moveGhost( game, g ) {
