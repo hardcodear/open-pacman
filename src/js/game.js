@@ -221,6 +221,26 @@ function decideGhost( game, g ) {
     routeGhost( grid, g, target.x, target.y, true );
     return;
   }
+  if ( g.kind === 'evasive' ) {
+    const distances = ghostDistances( grid, Math.round( p.x ), Math.round( p.y ) );
+    if ( distances[ g.y ][ g.x ] < 6 ) {
+      let best = null;
+      let bestDist = -1;
+      const width = grid[ 0 ].length;
+      for ( const dir of Object.keys( DIRS ) ) {
+        if ( !canMove( grid, g.x, g.y, dir, 'ghost' ) ) continue;
+        const d = DIRS[ dir ];
+        const nx = ( g.x + d.x + width ) % width;
+        const dist = distances[ g.y + d.y ][ nx ];
+        if ( dist > bestDist ) {
+          bestDist = dist;
+          best = dir;
+        }
+      }
+      if ( best ) g.dir = best;
+      return;
+    }
+  }
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
