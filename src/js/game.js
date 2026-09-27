@@ -42,6 +42,8 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      released: false,
+      patrolIndex: 0,
     } ) ),
   };
 }
@@ -168,6 +170,8 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.released = false;
+    g.patrolIndex = 0;
   } );
 }
 
